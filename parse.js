@@ -12,7 +12,19 @@ var nagiosCfg = {
 	path: 	null,
 	main: 	[],
 	dirs: 	[],
-	files: 	[]
+	files: 	[],
+};
+
+var nagiosObj = {
+	commands: [],
+	contacts: [],
+	contactgroups: [],
+	hosts: [],
+	hostgroups: [],
+	hostextinfos: [],
+	services: [],
+	servicegroups: [],
+	timeperiods: [],
 };
 
 var detectLinuxDistro = function(callback){
@@ -60,8 +72,6 @@ var walk = function(directory, done){
 
 
 
-
-
 async.series(
 	{
 		detectDistro: function(callback) { 
@@ -80,9 +90,8 @@ async.series(
 					detectNagiosCfgDirectives(nagiosCfg.main[i]);
 				}
 
-				callback();
+				callback(err);
 			});
-
 		},
 
 		findNagiosConfigFiles: function(callback){
@@ -98,16 +107,48 @@ async.series(
 		},
 		
 		parseNagiosCfgFiles: function(callback){
-			callback();
-		},
+			var pending = nagiosCfg.files.length;
 
+			nagiosCfg.files.forEach(function(cfgFile){
+
+				fs.readFile(cfgFile, function(err,buffer){
+					if(err){ console.log(err); callback(err); }
+
+					var lines = buffer.toString().split(/\n/);
+					var newObject, objectType, inObjectDefn = false;
+					var reDefinition = /\s*define\s*(\w*)\s*\{/;
+					var reDirectives = /\s*(\w*)\s*([^;]*)/;
+
+					lines.forEach(function(line){
+						if(line.match(/^#/)){ null; }		// Comments
+						else if(line.match(/^$/)){ null; }	// Blank Lines
+						else if(reDefinition.exec(line)){	// Object Defn
+							inObjectDefn = true;
+							newObject = [];
+							objectType = reDefinition.exec(line)[1] + 's';
+						}
+						else if (inObjectDefn === true){	// In Object Defn
+							if(line.match(/\}/)){ 			// End of Object Defn
+								inObjectDefn = false;
+								nagiosObj[objectType].push(newObject);
+							}
+							else { newObject.push({			// Object Directives
+									directive: reDirectives.exec(line)[1],
+									value: reDirectives.exec(line)[2]
+								});
+							}
+						}
+						else { console.log(line); }
+					});
+
+					if(--pending===0){ callback(); }
+				});
+
+			});
+		},
 	},
+
 	function(err,results){
 		console.log('async callback');
-		console.log('************ DIRS ************');
-		console.log(nagiosCfg.dirs);
-		console.log('************ FILES ************');
-		console.log(nagiosCfg.files);
 	}
 );
-

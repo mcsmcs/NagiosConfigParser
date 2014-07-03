@@ -9,10 +9,10 @@ var child;
 var i,j,k;
 
 var nagiosCfg = {
-	path: null,
-	main: [],
-	dirs: [],
-	files: []
+	path: 	null,
+	main: 	[],
+	dirs: 	[],
+	files: 	[]
 };
 
 var detectLinuxDistro = function(callback){
@@ -27,6 +27,39 @@ var detectNagiosCfgDirectives = function(cfgLine){
 	if (cfgLine.match(/^cfg_dir=/)){ nagiosCfg.dirs.push(cfgLine.split('=')[1]); }
 	else if (cfgLine.match(/^cfg_file=/)){ nagiosCfg.files.push(cfgLine.split('=')[1]); }
 };
+
+
+var walk = function(directory, done){
+	var results = [];
+	var pendingFiles;
+
+	fs.readdir(directory, function(err, files){
+		if(err){ console.log(err); done(err); }
+		pendingFiles = files.length;
+
+		files.forEach(function(fileName, index){
+
+			var filePath = directory + '/' + fileName;
+			fs.stat(filePath, function(err,stat){
+
+				if(stat && stat.isDirectory()){
+					walk(filePath, function(err,subDirFiles){
+						if(err){ done(err); }
+						results = results.concat(subDirFiles);
+						if(--pendingFiles === 0){ done(null, results); }
+					});
+				} else {
+					results.push(filePath);
+					if(--pendingFiles === 0){ done(null, results); }
+
+				}
+			});
+		});
+	});
+};
+
+
+
 
 
 async.series(
@@ -52,16 +85,16 @@ async.series(
 
 		},
 
-		parseNagiosCfgDirs: function(callback){
-			var files, i;
-
-			var addToCfgFiles = function(filename, index, array){ nagiosCfg.files.push(nagiosCfg.dirs[i] + '/' + filename); };
-
-			for (i=0; i<nagiosCfg.dirs.length; i++){
-				files = fs.readdirSync(nagiosCfg.dirs[i]);
-				files.forEach(addToCfgFiles);
-			}
-			callback();
+		findNagiosConfigFiles: function(callback){
+			var pending = nagiosCfg.dirs.length;
+			var addToCfgFiles = function(err,files){
+				nagiosCfg.files = nagiosCfg.files.concat(files);
+				if(--pending === 0){ callback(err); }
+			};
+			
+			nagiosCfg.dirs.forEach(function(directory){
+				walk(directory, addToCfgFiles);
+			});
 		},
 		
 		parseNagiosCfgFiles: function(callback){
@@ -71,8 +104,10 @@ async.series(
 	},
 	function(err,results){
 		console.log('async callback');
-		console.log(nagiosCfg.files);
+		console.log('************ DIRS ************');
 		console.log(nagiosCfg.dirs);
+		console.log('************ FILES ************');
+		console.log(nagiosCfg.files);
 	}
 );
 

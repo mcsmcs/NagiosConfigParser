@@ -47,10 +47,11 @@ var walk = function(directory, done){
 
 	fs.readdir(directory, function(err, files){
 		if(err){ console.log(err); done(err); }
+		if(files.length === 0){ done(null, results); }
+
 		pendingFiles = files.length;
 
 		files.forEach(function(fileName, index){
-
 			var filePath = directory + '/' + fileName;
 			fs.stat(filePath, function(err,stat){
 
@@ -69,7 +70,6 @@ var walk = function(directory, done){
 		});
 	});
 };
-
 
 
 async.series(
